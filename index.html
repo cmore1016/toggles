@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Toggle Battle</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f5f5f5;
+    }
+    #battle-log {
+      height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      background: white;
+      padding: 10px;
+      margin: 10px 0;
+      text-align: left;
+      font-family: monospace;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      font-size: 14px;
+    }
+    #info-panel {
+      border: 1px solid #ccc;
+      background: #fff;
+      padding: 10px;
+      margin-top: 10px;
+      display: none;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="start-screen">
+    <p>Choose your Toggle:</p>
+    <div>
+      <button onclick="startGame('Poco')">Poco</button>
+      <button onclick="showDetails('Poco')">View Poco Details</button>
+    </div>
+    <div>
+      <button onclick="startGame('Bumble')">Bumble</button>
+      <button onclick="showDetails('Bumble')">View Bumble Details</button>
+    </div>
+  </div>
+
+  <div id="details-screen" style="display:none;">
+    <h2 id="details-name"></h2>
+    <p id="details-animal"></p>
+    <p id="details-stats"></p>
+    <p id="details-attacks"></p>
+    <button onclick="backToMenu()">Back</button>
+  </div>
+
+  <div id="battle-screen" style="display:none;">
+    <h2 id="player-name"></h2> VS <h2 id="enemy-name"></h2>
+    <p id="player-hp"></p>
+    <p id="enemy-hp"></p>
+
+    <div id="battle-log"></div>
+
+    <div id="attack-buttons"></div>
+    <button onclick="toggleInfo()">Info</button>
+
+    <div id="info-panel"></div>
+  </div>
+
+<script>
+const toggles = {
+  "Poco": {
+    name: "Poco",
+    animal: "Dog",
+    hp: 100,
+    attack: 15,
+    defense: 10,
+    attacks: [
+      { name: "Bite", type: "damage", value: 20 },
+      { name: "Bark", type: "buff", value: 10 },
+      { name: "Dog Love", type: "heal", value: 20 },
+      { name: "Hunt", type: "damage", value: 40, missChance: 0.5 }
+    ]
+  },
+  "Bumble": {
+    name: "Bumble",
+    animal: "Bee",
+    hp: 90,
+    attack: 18,
+    defense: 8,
+    attacks: [
+      { name: "Zap", type: "damage", value: 20 },
+      { name: "Boost", type: "buff", value: 10 },
+      { name: "Wing Shield", type: "defense", value: 10 },
+      { name: "Lightning Dash", type: "damage", value: 40, missChance: 0.5 }
+    ]
+  }
+};
+
+let playerToggle, enemyToggle, playerTurn;
+
+function startGame(choice) {
+  playerToggle = JSON.parse(JSON.stringify(toggles[choice]));
+  enemyToggle = JSON.parse(JSON.stringify(toggles[choice === "Poco" ? "Bumble" : "Poco"]));
+  playerToggle.currentHp = playerToggle.hp;
+  enemyToggle.currentHp = enemyToggle.hp;
+  playerToggle.attackBuff = 0;
+  enemyToggle.attackBuff = 0;
+  playerToggle.defenseBuff = 0;
+  enemyToggle.defenseBuff = 0;
+
+  document.getElementById("start-screen").style.display = "none";
+  document.getElementById("details-screen").style.display = "none";
+  document.getElementById("battle-screen").style.display = "block";
+
+  document.getElementById("player-name").textContent = playerToggle.name;
+  document.getElementById("enemy-name").textContent = enemyToggle.name;
+
+  updateHp();
+
+  const container = document.getElementById("attack-buttons");
+  container.innerHTML = "";
+  playerToggle.attacks.forEach((atk, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = atk.name;
+    btn.onclick = () => performAttack(playerToggle, enemyToggle, atk);
+    container.appendChild(btn);
+  });
+
+  flipCoin();
+}
+
+function flipCoin() {
+  playerTurn = Math.random() < 0.5;
+  addToLog(playerTurn ? "You go first!" : "Enemy goes first!");
+  if (!playerTurn) {
+    setTimeout(enemyMove, 1000);
+  }
+}
+
+function updateHp() {
+  document.getElementById("player-hp").textContent = `${playerToggle.name} HP: ${playerToggle.currentHp}`;
+  document.getElementById("enemy-hp").textContent = `${enemyToggle.name} HP: ${enemyToggle.currentHp}`;
+}
+
+function performAttack(attacker, defender, attack) {
+  if (!playerTurn) return;
+  executeAttack(attacker, defender, attack);
+  if (defender.currentHp > 0) {
+    playerTurn = false;
+    setTimeout(enemyMove, 1000);
+  }
+}
+
+function enemyMove() {
+  const attack = enemyToggle.attacks[Math.floor(Math.random() * enemyToggle.attacks.length)];
+  executeAttack(enemyToggle, playerToggle, attack);
+  if (playerToggle.currentHp > 0) {
+    playerTurn = true;
+  }
+}
+
+function executeAttack(attacker, defender, attack) {
+  if (attack.type === "damage") {
+    if (attack.missChance && Math.random() < attack.missChance) {
+      addToLogTyping(`${attacker.name}'s ${attack.name} missed!`);
+      return;
+    }
+    let dmg = Math.max(0, attack.value + attacker.attack + (attacker.attackBuff || 0) - defender.defense - (defender.defenseBuff || 0));
+    defender.currentHp = Math.max(0, defender.currentHp - dmg);
+    addToLogTyping(`${attacker.name} used ${attack.name}! It did ${dmg} damage to ${defender.name}.`);
+  } else if (attack.type === "buff") {
+    attacker.attackBuff = (attacker.attackBuff || 0) + attack.value;
+    addToLogTyping(`${attacker.name} used ${attack.name}! Attack rose by ${attack.value}.`);
+  } else if (attack.type === "heal") {
+    attacker.currentHp = Math.min(attacker.hp, attacker.currentHp + attack.value);
+    addToLogTyping(`${attacker.name} used ${attack.name} and healed ${attack.value} HP!`);
+  } else if (attack.type === "defense") {
+    attacker.defenseBuff = (attacker.defenseBuff || 0) + attack.value;
+    addToLogTyping(`${attacker.name} used ${attack.name}! Defense rose by ${attack.value}.`);
+  }
+  updateHp();
+  checkWin();
+}
+
+function checkWin() {
+  if (playerToggle.currentHp <= 0) {
+    addToLogTyping("You lost the battle!");
+    playerTurn = false;
+  } else if (enemyToggle.currentHp <= 0) {
+    addToLogTyping("You won the battle!");
+    playerTurn = false;
+  }
+}
+
+function addToLog(text) {
+  const log = document.getElementById("battle-log");
+  log.innerHTML += text + "<br>";
+  log.scrollTop = log.scrollHeight;
+}
+
+function addToLogTyping(text) {
+  const log = document.getElementById("battle-log");
+  let i = 0;
+  let currentLine = "";
+  function typeChar() {
+    if (i < text.length) {
+      currentLine += text.charAt(i);
+      log.innerHTML = log.innerHTML.replace(/<br>$/, "") + currentLine + "|<br>";
+      i++;
+      setTimeout(typeChar, 30);
+    } else {
+      log.innerHTML = log.innerHTML.replace("|<br>", "<br>");
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+  typeChar();
+}
+
+function showDetails(name) {
+  const t = toggles[name];
+  document.getElementById("start-screen").style.display = "none";
+  document.getElementById("details-screen").style.display = "block";
+  document.getElementById("details-name").textContent = t.name;
+  document.getElementById("details-animal").textContent = `Animal: ${t.animal}`;
+  document.getElementById("details-stats").textContent = `HP: ${t.hp}, Attack: ${t.attack}, Defense: ${t.defense}`;
+  document.getElementById("details-attacks").innerHTML = "Attacks:<br>" + t.attacks.map(a => `${a.name} - ${a.type} ${a.value}`).join("<br>");
+}
+
+function backToMenu() {
+  document.getElementById("details-screen").style.display = "none";
+  document.getElementById("start-screen").style.display = "block";
+}
+
+function toggleInfo() {
+  const panel = document.getElementById("info-panel");
+  if (panel.style.display === "none") {
+    panel.style.display = "block";
+    panel.innerHTML = `<strong>${playerToggle.name}</strong><br>HP: ${playerToggle.currentHp}/${playerToggle.hp}<br>Attack: ${playerToggle.attack} (+${playerToggle.attackBuff || 0})<br>Defense: ${playerToggle.defense} (+${playerToggle.defenseBuff || 0})<br><br><strong>Enemy: ${enemyToggle.name}</strong><br>HP: ${enemyToggle.currentHp}/${enemyToggle.hp}<br>Attack: ${enemyToggle.attack} (+${enemyToggle.attackBuff || 0})<br>Defense: ${enemyToggle.defense} (+${enemyToggle.defenseBuff || 0})<br><br><strong>Attacks:</strong><br>${playerToggle.attacks.map(a => `${a.name} - ${a.type} ${a.value}`).join("<br>")}`;
+  } else {
+    panel.style.display = "none";
+  }
+}
+</script>
+</body>
+</html>
